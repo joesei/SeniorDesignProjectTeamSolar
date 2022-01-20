@@ -11,20 +11,27 @@
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
 #include <Stepper.h>
+#include <DHT.h>
 
 //code assumes our LDRs will be attached to either side of the solar panel, with one on the east side and one on the west side
 Servo motor;                   // servo object to control the motor
 
-
+// LDR values
 const int LDRpin_topleft = A0;              // assign pins to LDRs and motor
 const int LDRpin_bottomleft = A1;
 const int LDRpin_topright = A2;
 const int LDRpin_bottomright = A3;
-
-
 const int eLDRpin = A0;
 const int wLDRpin = A1;
 
+// DHT values
+const int kDHTpin = 8;
+const int kDHTtype = DHT11;
+float temperature;
+float humidity;
+
+
+// Servo values
 int servoPin = 3;
 int eLDRvalue = 0;
 int wLDRvalue = 0;
@@ -33,8 +40,11 @@ int offset = 0;                // difference between the gathered values of the 
 int motorPos = 90;             // starting angle of the servo motor
 
 
+// Stepper Motor values
 const int kSteps = 64;         // Possible max = 64 * 48
 const int kStepperSpeed = 5;   // RPM
+
+DHT dht(kDHTpin, kDHTtype);
 
 Stepper stepper_motor(kSteps, 4, 5, 6, 7);
 
@@ -68,8 +78,25 @@ void rotateStepper(Stepper motor) {
     steps--;
   }
   
-  motor.step(steps);
+  motor.step(kStepperSpeed);
 }
+
+
+void readDHTvalues(DHT dht) {
+  
+  temperature = dht.readTemperature(true);
+  humidity = dht.readHumidity();
+  
+  if (isnan(temperature)) {
+    Serial.println("Failed to read temperature");
+  }
+
+  if (isnan(humidity)) {
+    Serial.println("Failed to read humidity");
+  }
+  
+}
+
 
 void setup() {
 
@@ -89,6 +116,12 @@ void setup() {
 
   // Stepper Motor Code
   stepper_motor.setSpeed(5);
+
+  // DHT Sensor Code
+  dht.begin();
+  temperature = 0;
+  humidity = 0;
+  
   
 }
 
