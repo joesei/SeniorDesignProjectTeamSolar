@@ -10,22 +10,38 @@
 #include <Servo.h>
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
+#include <Stepper.h>
 
 //code assumes our LDRs will be attached to either side of the solar panel, with one on the east side and one on the west side
-Servo motor;             // servo object to control the motor
-int eLDRpin = A0;        // assign pins to LDRs and motor
-int wLDRpin = A1;
+Servo motor;                   // servo object to control the motor
+
+
+const int LDRpin_topleft = A0;              // assign pins to LDRs and motor
+const int LDRpin_bottomleft = A1;
+const int LDRpin_topright = A2;
+const int LDRpin_bottomright = A3;
+
+
+const int eLDRpin = A0;
+const int wLDRpin = A1;
+
 int servoPin = 3;
 int eLDRvalue = 0;
 int wLDRvalue = 0;
-int calibration = 0;   // LDRs don't come with the same inital value, so we have to figure out what the difference between the inital values are and save it here
-int offset = 0;          // difference between the gathered values of the LDRs
-int motorPos = 90;       // starting angle of the servo motor
+int calibration = 0;           // LDRs don't come with the same inital value, so we have to figure out what the difference between the inital values are and save it here
+int offset = 0;                // difference between the gathered values of the LDRs
+int motorPos = 90;             // starting angle of the servo motor
+
+
+const int kSteps = 64;         // Possible max = 64 * 48
+const int kStepperSpeed = 5;   // RPM
+
+Stepper stepper_motor(kSteps, 4, 5, 6, 7);
 
 LiquidCrystal_I2C lcd(0x27, 2, 1, 0, 4, 5, 6, 7, 3, POSITIVE);
 
 
-// Rotate the servo in small increments to avoid fast changes that may impact the hardware
+// Rotate the servo (top/down) in small increments to avoid fast changes that may impact the hardware
 void rotateServo(Servo motor, int angle) {
   int current_angle = motor.read();
   int difference = current_angle - angle;
@@ -36,19 +52,44 @@ void rotateServo(Servo motor, int angle) {
   }
 }
 
+// Rotate stepper motor (left/right) in small increment
+void rotateStepper(Stepper motor) {
+
+  int topleft = analogRead(LDRpin_topleft);
+  int bottomleft = analogRead(LDRpin_bottomleft);
+  int topright = analogRead(LDRpin_topright);
+  int bottomright = analogRead(LDRpin_bottomright);
+
+  int steps = 0;
+  
+  if (topleft + bottomleft > topright + bottomright) {
+    steps++;
+  } else {
+    steps--;
+  }
+  
+  motor.step(steps);
+}
+
 void setup() {
 
+  // LCD Code
   lcd.begin(16, 2);
   lcd.backlight();
   
   Serial.begin(9600);
-  
+
+  // Servo Motor Code
   motor.attach(servoPin);
   pinMode(eLDRpin, INPUT);
   pinMode(wLDRpin, INPUT);
   
   //motor.write(motorPos);
   rotateServo(motor, motorPos);
+
+  // Stepper Motor Code
+  stepper_motor.setSpeed(5);
+  
 }
 
 void LDRtrack() { //function for tracking the sun using values gathered from the LDR and moving the motor
@@ -102,25 +143,6 @@ void LDRtrack() { //function for tracking the sun using values gathered from the
 }
 
 void loop() {
-  /*
-  eLDRvalue = analogRead(eLDRpin) + calibration;    
-  wLDRvalue = analogRead(wLDRpin);
-  offset = eLDRvalue - wLDRvalue;
-
-  // Print LDR values into LCD -----------
-  char str[16];
-  char estr[16] = "East LDR: ";
-  char wstr[16] = "West LDR: "; 
-  sprintf(str, "%d", eLDRvalue);
-  strcat(estr, str);
-  sprintf(str, "%d", wLDRvalue);
-  strcat(wstr, str);
-  lcd.clear();
-  lcd.setCursor(0, 0);
-  lcd.print(estr);
-  lcd.setCursor(0, 1);
-  lcd.print(wstr);
-  */
   LDRtrack();
   delay(300); //determines how often we want to check the values in the LDRs
 }
