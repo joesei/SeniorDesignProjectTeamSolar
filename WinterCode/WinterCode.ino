@@ -7,6 +7,8 @@
  * 
  * 
  */
+
+
 #include <Servo.h>
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
@@ -19,16 +21,16 @@
 Servo motor;                   // servo object to control the motor
 
 // LDR values
-const int LDRpin_topleft = A0;              // assign pins to LDRs and motor
-const int LDRpin_bottomleft = A1;
-const int LDRpin_topright = A2;
-const int LDRpin_bottomright = A3;
+const int LDRpin_topleft = A0;           // green cable 
+const int LDRpin_bottomleft = A1;        // yellow cable
+const int LDRpin_topright = A2;          // blue cable
+const int LDRpin_bottomright = A3;       // white cable
 const int eLDRpin = A0;
 const int wLDRpin = A1;
 
 // DHT values
 const int kDHTpin = 8;
-const int kDHTtype = DHT11;
+const int kDHTtype = DHT22;
 float temperature;
 float humidity;
 
@@ -52,7 +54,8 @@ Stepper stepper_motor(kSteps, 4, 5, 6, 7);
 
 LiquidCrystal_I2C lcd(0x27, 2, 1, 0, 4, 5, 6, 7, 3, POSITIVE);
 
-BH1750 lightIntensity;
+// Address 0x23 and 0x77 for light sensor and pressure sensor (I2C Address)
+BH1750 lightIntensity(0x23);
 
 SFE_BMP180 atmoPressure;
 #define ALTITUDE 17.0688  //Altitude of Irvine CA in meters 
@@ -81,7 +84,9 @@ void rotateStepper(Stepper motor) {
   
   if (topleft + bottomleft > topright + bottomright) {
     steps++;
+    Serial.println("Motor moving left");
   } else {
+    Serial.println("Motor moving right");
     steps--;
   }
   
@@ -134,7 +139,8 @@ void setup() {
   lightIntensity.begin();
 
   //BMP180 atmoPressure
-  if (pressure.begin()) {
+  
+  if (atmoPressure.begin()) {
     Serial.println("BMP180 init success");
   } else {
     Serial.println("BMP180 init fail\n\n");
@@ -195,8 +201,80 @@ void LDRtrack() { //function for tracking the sun using values gathered from the
 }
 
 void loop() {
-  LDRtrack();
-  delay(300); //determines how often we want to check the values in the LDRs
+
+  readDHTvalues(dht);
+  delay(1000);
+  Serial.print("t: ");
+  Serial.println(temperature);
+  Serial.print("humidity: ");
+  Serial.println(humidity);
+  
+  float luxLevel = lightIntensity.readLightLevel();
+  Serial.print("LightIntensity: ");
+  Serial.print(luxLevel);
+  Serial.println(" lx");
+  delay(1000);
+
+  char check;
+  double temp, pressure, slpressure, altitude;
+
+  check = atmoPressure.startTemperature();
+  if (check != 0){
+    delay(check);
+    //Get temp from BMP180
+    check = atmoPressure.getTemperature(temp);
+    if (check != 0) {
+      Serial.print("Temperature: ");
+      Serial.print(temp, 2);
+      Serial.print(" degrees Celsius,");
+      Serial.print((9.0/5.0) * temp + 32.0, 2);
+      Serial.print(" degree Farenheit");
+  
+      //Get atmo pressure from BMP180
+      check = atmoPressure.startPressure(3);
+      if (check != 0) {
+        delay(check);
+        check = atmoPressure.getPressure(pressure, temp);
+        if (check != 0) {
+          Serial.print("Absolute Pressure ");
+          Serial.print(pressure, 2);
+    
+          //Getting sea-level pressure
+          slpressure = atmoPressure.sealevel(pressure, ALTITUDE);
+          Serial.print("relative (sea-level) pressure: ");
+          Serial.print(slpressure, 2);
+          Serial.println(" millibars");
+    
+          //Getting altitude
+          altitude = atmoPressure.altitude(pressure, slpressure);
+          Serial.print("Current altitude: ");
+          Serial.print(altitude, 0);
+          Serial.println(" meters");
+        } else {
+          Serial.println("Error getting pressure measurement");
+        }
+      } else {
+        Serial.println("Error starting pressure measurement");
+      }
+    } else {
+      Serial.println("Error getting temp measurement");
+    }
+  } else {
+    Serial.println("Error starting temp measurement");
+  }
+
+  Serial.println();
+  delay(10000);
+
+
+}
+  
+
+
+  
+  
+   /* ---------------------------------------------------------------------------------------------------------
+  //delay(300); //determines how often we want to check the values in the LDRs
 
   //Display lightIntensity values
   float luxLevel = lightIntensity.readLightLevel();
@@ -261,16 +339,9 @@ void loop() {
 
   Serial.println();
   delay(10000);
+  ---------------------------------------------------------------------------------------------------
+  */
   
-
-  
-}
-
-
-
-
-
-
 
 
 
@@ -281,22 +352,211 @@ void loop() {
 
 
 /*
-const int ldrPin1 = A0;
-const int ldrPin2 = A1;
-const int ldrPin3 = A2;
-const int ldrPin4 = A3;
+#include <Wire.h>
+#include <DHT.h>
+#include <BH1750.h>
+#include <SFE_BMP180.h>
+#include <LiquidCrystal_I2C.h>
+#include <Servo.h> 
+
+// DHT values
+const int kDHTpin = 8;
+const int kDHTtype = DHT22;
+float temperature;
+float humidity;
+DHT dht(kDHTpin, kDHTtype);
+void readDHTvalues(DHT dht) {
+  
+  temperature = dht.readTemperature(true);
+  humidity = dht.readHumidity();
+  
+  if (isnan(temperature)) {
+    Serial.println("Failed to read temperature");
+  }
+
+  if (isnan(humidity)) {
+    Serial.println("Failed to read humidity");
+  } 
+}
+
+BH1750 lightIntensity(0x23);
+
+SFE_BMP180 atmoPressure;
+#define ALTITUDE 17.0688  //Altitude of Irvine CA in meters 
+
+LiquidCrystal_I2C lcd(0x27, 2, 1, 0, 4, 5, 6, 7, 3, POSITIVE);
+
+Servo servo;
+const int servoPin = 2;
+const int servoStop = 90;
+const int servoForward = 84;
+const int servoBackward = 98; 
+float servoSpeed = 46.66;
+int currentAngle = 0;
+// 53 61
+// Add safety so it doesnt pass angle 360 or -360
+void rotateServo(Servo servo, int angle) {
+  int changeAngle = currentAngle - angle;
+  int changeTime = abs(changeAngle / servoSpeed);
+  if (changeAngle < 0) {
+    servo.write(servoBackward);
+    delay(changeTime);
+  } else if (changeAngle > 0) {
+    servo.write(servoForward);
+    delay(changeTime);
+  }
+  servo.write(servoStop);
+  currentAngle = angle;
+}
+
+
+
+const int topleft = A0;      // green
+const int bottomleft = A1;   // yellow
+const int topright = A2;     // blue
+const int bottomright = A3;  // white
 void setup() {
   Serial.begin(9600);
-  pinMode(ldrPin1, INPUT);
-  pinMode(ldrPin2, INPUT);
-  pinMode(ldrPin3, INPUT);
-  pinMode(ldrPin4, INPUT);
-}
-void loop() {
-  int ldrStatus1 = analogRead(ldrPin1);
-  int ldrStatus2 = analogRead(ldrPin2);
-  int ldrStatus3 = analogRead(ldrPin3);
-  int ldrStatus4 = analogRead(ldrPin4);
+  pinMode(topleft, INPUT);
+  pinMode(bottomleft, INPUT);
+  pinMode(topright, INPUT);
+  pinMode(bottomright, INPUT);
+
+  // Servo Motor Code
+  servo.attach(servoPin);
+  servo.write(servoStop);
+  */
+  /*
+  // DHT Code
+  dht.begin();
+  temperature = 0;
+  humidity = 0;
+
+  // LCD Code
+  lcd.begin(16, 2);
+  lcd.backlight();
+
+  //BH1750 lightIntensity Code
+  Wire.begin();
+  lightIntensity.begin();
+
+  //BMP180 atmoPressure
+  
+  if (atmoPressure.begin()) {
+    Serial.println("BMP180 init success");
+  } else {
+    Serial.println("BMP180 init fail\n\n");
+    Serial.println("Check connection");
+    while (1);
+  }
+  */
+//}
+
+//void loop() {
+  //int ldrStatus1 = analogRead(topleft);
+  //int ldrStatus2 = analogRead(bottomleft);
+  //int ldrStatus3 = analogRead(topright);
+  //int ldrStatus4 = analogRead(bottomright);
+/*
+  int angle1 = servo.read();
+  Serial.print("Servo Angle: ");
+  Serial.println(angle1);
+  servo.write(servoForward);
+  */
+  /*
+  Serial.print("Servo Going Forward: ");
+  Serial.println(servoForward);
+  delay(150);
+  servo.write(servoStop);
+  int angle2 = servo.read();
+  Serial.print("Servo Angle: ");
+  Serial.println(angle2);
+  delay(3000);
+  servo.write(servoBackward);
+  Serial.print("Servo Going Backward: ");
+  Serial.println(servoBackward);
+  delay(150);
+  servo.write(servoStop);
+  int angle3 = servo.read();
+  Serial.print("Servo Angle: ");
+  Serial.println(angle3);
+  delay(3000);
+  //servoSpeed = (angle2 - angle1) / 0.1; // angle / second
+  Serial.print("Servo Speed: ");
+  Serial.println(servoSpeed);
+  */
+  
+  
+
+
+  
+
+  /*
+  // 30 is offset so no constant movement
+  if ((ldrStatus1 + ldrStatus2) - (ldrStatus3 + ldrStatus4) > 45) {
+    Serial.println("Stepper motor moved left");
+  } else if ((ldrStatus1 + ldrStatus2) - (ldrStatus3 + ldrStatus4) < -45){
+    Serial.println("Stepper motor moved right");
+  } 
+
+  if ((ldrStatus1 + ldrStatus3) - (ldrStatus2 + ldrStatus4) > 45) {
+    Serial.println("Servo motor moved up");
+  } else if ((ldrStatus1 + ldrStatus3) - (ldrStatus2 + ldrStatus4) < -45){
+    Serial.println("Servo motor moved down");
+  } 
+  
+  readDHTvalues(dht);
+  float luxLevel = lightIntensity.readLightLevel();
+  Serial.print("Lux Level: ");
+  Serial.println(luxLevel);
+  Serial.print("Temperature: ");
+  Serial.println(temperature);
+  Serial.print("Humidity: ");
+  Serial.println(humidity);
+
+  char check;
+  double temp, pressure, slpressure, altitude;
+
+  check = atmoPressure.startTemperature();
+  if (check != 0){
+    delay(check);
+    //Get temp from BMP180
+    check = atmoPressure.getTemperature(temp);
+    if (check != 0) {  
+      //Get atmo pressure from BMP180
+      check = atmoPressure.startPressure(3);
+      if (check != 0) {
+        delay(check);
+        check = atmoPressure.getPressure(pressure, temp);
+        if (check != 0) {
+          Serial.print("Absolute Pressure: ");
+          Serial.println(pressure);
+    
+          //Getting sea-level pressure
+          slpressure = atmoPressure.sealevel(pressure, ALTITUDE);
+          Serial.print("Relative (Sea-Level) Pressure: ");
+          Serial.print(slpressure, 2);
+          Serial.println(" millibars");
+    
+          //Getting altitude
+          altitude = atmoPressure.altitude(pressure, slpressure);
+          Serial.print("Current Altitude: ");
+          Serial.print(altitude);
+          Serial.println(" meters");
+        } else {
+          Serial.println("Error getting pressure measurement");
+        }
+      } else {
+        Serial.println("Error starting pressure measurement");
+      }
+    } else {
+      Serial.println("Error getting temp measurement");
+    }
+  } else {
+    Serial.println("Error starting temp measurement");
+  }
+  
+  
   Serial.print("ldr1: ");
   Serial.println(ldrStatus1);
   Serial.print("ldr2: ");
@@ -306,10 +566,12 @@ void loop() {
   Serial.print("ldr4: ");
   Serial.println(ldrStatus4);
   Serial.println("------------------");
-  delay(2000);
   
-}
-*/
+  delay(3500);
+  */
+  
+//}
+
 
 
 
