@@ -4,6 +4,13 @@
 #include <BH1750.h>
 #include <SFE_BMP180.h>
 #include <Wire.h>
+#include <Thread.h>
+#include <ThreadController.h>
+
+// Threads
+ThreadController controll = ThreadController();
+Thread lcd_thread = Thread();
+Thread tracker_thread = Thread();
 
 
 // LDR values
@@ -11,6 +18,7 @@ const int top_left = A0;      // green
 const int bottom_left = A1;   // yellow
 const int top_right = A2;     // blue
 const int bottom_right = A3;  // white
+int ldr1, ldr2, ldr3, ldr4;
 
 
 // Servo Motors
@@ -18,7 +26,7 @@ const int bottom_servo_pin = 2;
 const int top_servo_pin = 3;
 const int servo_stop = 90;
 const int servo_forward = 78;
-const int servo_backward = 98; 
+const int servo_backward = 102; 
 const float servo_speed = 46.66;
 float current_angle; 
 int motor_pos;
@@ -27,6 +35,7 @@ Servo top_servo;
 
 // LCD
 LiquidCrystal_I2C lcd(0x27, 2, 1, 0, 4, 5, 6, 7, 3, POSITIVE);
+bool lcd_change;
 
 // Light Intensity
 BH1750 light_intensity(0x23);
@@ -35,6 +44,7 @@ float lux_level;
 // Pressure
 SFE_BMP180 atmo_pressure;
 const float ALTITUDE = 17.0688;
+double pressure;
 
 // DHT values
 const int DHT_pin = 8;
@@ -45,6 +55,9 @@ DHT dht(DHT_pin, DHT_type);
 
 
 void test_angle();
+void set_initial();
+void lcd_display();
+void tracker();
 
 
 
@@ -57,6 +70,10 @@ void setup() {
   pinMode(bottom_left, INPUT);
   pinMode(top_right, INPUT);
   pinMode(bottom_right, INPUT);
+  ldr1 = 0;
+  ldr2 = 0;
+  ldr3 = 0;
+  ldr4 = 0;
 
   // Servo
   bottom_servo.attach(bottom_servo_pin);
@@ -64,6 +81,7 @@ void setup() {
   bottom_servo.write(servo_stop);
   current_angle = 0;
   motor_pos = 90;
+  top_servo.write(motor_pos);
 
   // DHT 
   dht.begin();
@@ -73,13 +91,25 @@ void setup() {
   // LCD 
   lcd.begin(16, 2);
   lcd.backlight();
+  lcd_change = true;
 
   //Light Intensity
   Wire.begin();
   light_intensity.begin();
+  lux_level = 0;
 
   // Pressure
   atmo_pressure.begin();
+  pressure = 0;
+
+  // Threads
+  lcd_thread.onRun(lcd_display);
+  lcd_thread.setInterval(2000);
+  tracker_thread.onRun(tracker);
+  tracker_thread.setInterval(500);
+
+  controll.add(&lcd_thread);
+  controll.add(&tracker_thread);
   
 }
 
@@ -87,33 +117,67 @@ void setup() {
 
 
 void loop() {
-  /* 
-  // Sun Tracker
-  int ldr1 = analogRead(top_left);
-  int ldr2 = analogRead(bottom_left);
-  int ldr3 = analogRead(top_right);
-  int ldr4 = analogRead(bottom_right);
 
-  if ((ldr1 - ldr2) > 30) {
+  controll.run();
+
+  // Monitor Testing
+  Serial.print("Temp: ");
+  Serial.println(temperature);
+  Serial.print("Humidity: ");
+  Serial.println(humidity);
+  Serial.print("Pressure: ");
+  Serial.println(pressure);
+  Serial.print("Light Intensity: ");
+  Serial.println(lux_level);
+
+  
+  // LCD
+  //lcd_display();
+  
+  //lcd.setCursor(0, 0);
+  //lcd.print("Testing");
+  
+  //delay(750);
+  
+  //set_initial();
+  
+}
+
+
+void tracker() {
+  
+  // Sun Tracker
+  ldr1 = analogRead(top_left);
+  ldr2 = analogRead(bottom_left);
+  ldr3 = analogRead(top_right);
+  ldr4 = analogRead(bottom_right);
+
+  if ((ldr1 - ldr2) > 30 || ((ldr3 - ldr4) > 30)) {
     if (motor_pos <= 160) {
-      ++motor_pos;
-      top_servo.write(motor_pos);
-    }
-  } else if ((ldr1 - ldr2) < -30) {
-    if (motor_pos >= 20) {
+      --motor_pos;
+      --motor_pos;
       --motor_pos;
       top_servo.write(motor_pos);
     }
+  } else if ((ldr1 - ldr2) < -30 || ((ldr3 - ldr4) > 30)) {
+    if (motor_pos >= 20) {
+      ++motor_pos;
+      ++motor_pos;
+      ++motor_pos;
+      top_servo.write(motor_pos);
+    }
   }
-
-  if ((ldr1 - ldr3) > 30) {
+  
+  //delay(200);
+  
+  if (((ldr1 - ldr3) > 30) || ((ldr2 - ldr4) > 30)) {
     if (current_angle <= 170) {
       bottom_servo.write(servo_forward);
       delay(150);
       bottom_servo.write(servo_stop);
       current_angle += servo_speed * .15;
     }
-  } else if ((ldr1 - ldr3) < -30) {
+  } else if ((ldr1 - ldr3) < -30 || ((ldr2 - ldr4) > -30)) {
     if (current_angle >= -170) {
       bottom_servo.write(servo_backward);
       delay(150);
@@ -128,7 +192,7 @@ void loop() {
   lux_level = light_intensity.readLightLevel();
 
   char check;
-  double temp, pressure, slpressure, altitude;
+  double temp, slpressure, altitude;
   check = atmo_pressure.startTemperature();
   if (check != 0){
     delay(check);
@@ -157,57 +221,75 @@ void loop() {
   } else {
     Serial.println("Error starting temp measurement");
   }
-
-
-  // Monitor Testing
-  Serial.print("Temp: ");
-  Serial.println(temperature);
-  Serial.print("Humidity: ");
-  Serial.println(humidity);
-  Serial.print("Pressure: ");
-  Serial.println(pressure);
-  Serial.print("Light Intensity: ");
-  Serial.println(lux_level);
-
-  
-  // LCD
-  char str[16];
-  char top_str[16] = "T: ";
-  char bottom_str[16] = "H: "; 
-  char top_p[16] = " P: ";
-  char bottom_l[16] = " L: ";
-  
-  sprintf(str, "%d", (int) temperature);
-  strcat(top_str, str);
-  char astr[16] = " F";
-  strcat(top_str, astr);
-  sprintf(str, "%d", (int) humidity);
-  strcat(bottom_str, str);
-  char bstr[16] = " %";
-  strcat(bottom_str, bstr);
-
-  sprintf(str, "%d", (int) pressure);
-  strcat(top_p, str);
-  strcat(top_str, top_p);
-
-  sprintf(str, "%d", (int) lux_level);
-  strcat(bottom_l, str);
-  strcat(bottom_str, bottom_l);
-  
-
-  lcd.clear();
-  lcd.setCursor(0, 0);
-  lcd.print(top_str);
-  lcd.setCursor(0, 1);
-  lcd.print(bottom_str);
-  */
-  
-  bottom_servo.write(servo_forward);
-  delay(1500);
-  
 }
 
+void lcd_display() {
+  if (lcd_change) {
+    char str[16];
+    char top_str[16] = "T: ";
+    char bottom_str[16] = "H: "; 
+    char top_p[16] = " P: ";
+    char bottom_l[16] = " L: ";
+    
+    sprintf(str, "%d", (int) temperature);
+    strcat(top_str, str);
+    char astr[16] = " F";
+    strcat(top_str, astr);
+    sprintf(str, "%d", (int) humidity);
+    strcat(bottom_str, str);
+    char bstr[16] = " %";
+    strcat(bottom_str, bstr);
+  
+    sprintf(str, "%d", (int) pressure);
+    strcat(top_p, str);
+    strcat(top_str, top_p);
+  
+    sprintf(str, "%d", (int) lux_level);
+    strcat(bottom_l, str);
+    strcat(bottom_str, bottom_l);
+    
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print(top_str);
+    lcd.setCursor(0, 1);
+    lcd.print(bottom_str);
 
+    lcd_change = false;
+  } else {
+    char str[16];
+    char top_str[16] = "1: ";
+    char bottom_str[16] = "2: "; 
+    char top_p[16] = " 3: ";
+    char bottom_l[16] = " 4: ";
+
+    sprintf(str, "%d", (int) ldr1);
+    strcat(top_str, str);
+
+    sprintf(str, "%d", (int) ldr2);
+    strcat(bottom_str, str);
+  
+    sprintf(str, "%d", (int) ldr3);
+    strcat(top_p, str);
+    strcat(top_str, top_p);
+  
+    sprintf(str, "%d", (int) ldr4);
+    strcat(bottom_l, str);
+    strcat(bottom_str, bottom_l);
+    
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print(top_str);
+    lcd.setCursor(0, 1);
+    lcd.print(bottom_str);
+    
+    lcd_change = true;
+  }
+}
+
+void set_initial() {
+  top_servo.write(90);
+  delay(5000);
+}
 
 void test_angle() {
   Serial.print("Current Angle: ");
