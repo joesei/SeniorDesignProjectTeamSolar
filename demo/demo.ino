@@ -26,7 +26,7 @@ const int bottom_servo_pin = 2;
 const int top_servo_pin = 3;
 const int servo_stop = 90;
 const int servo_forward = 78;
-const int servo_backward = 102; 
+const int servo_backward = 105; 
 const float servo_speed = 46.66;
 float current_angle; 
 int motor_pos;
@@ -58,8 +58,15 @@ void test_angle();
 void set_initial();
 void lcd_display();
 void tracker();
+void video_demo();
 
 
+Thread testing_thread = Thread();
+void testing() {
+  bottom_servo.write(servo_forward);
+  delay(150);
+  bottom_servo.write(servo_stop);
+}
 
 void setup() {
   // Serial Monitor
@@ -104,12 +111,17 @@ void setup() {
 
   // Threads
   lcd_thread.onRun(lcd_display);
-  lcd_thread.setInterval(2000);
+  lcd_thread.setInterval(2500);
   tracker_thread.onRun(tracker);
-  tracker_thread.setInterval(500);
+  tracker_thread.setInterval(250);
+  //testing_thread.onRun(testing);
+  //unsigned long seconds = 1000L;
+  //unsigned long minutes = seconds * 60 * 7;
+  //testing_thread.setInterval(minutes);
 
   controll.add(&lcd_thread);
   controll.add(&tracker_thread);
+  //controll.add(&testing_thread);
   
 }
 
@@ -118,29 +130,11 @@ void setup() {
 
 void loop() {
 
+
   controll.run();
-
-  // Monitor Testing
-  Serial.print("Temp: ");
-  Serial.println(temperature);
-  Serial.print("Humidity: ");
-  Serial.println(humidity);
-  Serial.print("Pressure: ");
-  Serial.println(pressure);
-  Serial.print("Light Intensity: ");
-  Serial.println(lux_level);
-
-  
-  // LCD
-  //lcd_display();
-  
-  //lcd.setCursor(0, 0);
-  //lcd.print("Testing");
-  
-  //delay(750);
+  //video_demo();
   
   //set_initial();
-  
 }
 
 
@@ -153,39 +147,37 @@ void tracker() {
   ldr4 = analogRead(bottom_right);
 
   if ((ldr1 - ldr2) > 30 || ((ldr3 - ldr4) > 30)) {
-    if (motor_pos <= 160) {
+    if (motor_pos >= 20) {
       --motor_pos;
       --motor_pos;
       --motor_pos;
       top_servo.write(motor_pos);
     }
-  } else if ((ldr1 - ldr2) < -30 || ((ldr3 - ldr4) > 30)) {
-    if (motor_pos >= 20) {
+  } else if ((ldr1 - ldr2) < -30 || ((ldr3 - ldr4) < -30)) {
+    if (motor_pos <= 160) {
       ++motor_pos;
       ++motor_pos;
       ++motor_pos;
       top_servo.write(motor_pos);
     }
   }
-  
-  //delay(200);
   
   if (((ldr1 - ldr3) > 30) || ((ldr2 - ldr4) > 30)) {
-    if (current_angle <= 170) {
-      bottom_servo.write(servo_forward);
-      delay(150);
-      bottom_servo.write(servo_stop);
-      current_angle += servo_speed * .15;
-    }
-  } else if ((ldr1 - ldr3) < -30 || ((ldr2 - ldr4) > -30)) {
-    if (current_angle >= -170) {
-      bottom_servo.write(servo_backward);
-      delay(150);
-      bottom_servo.write(servo_stop);
-      current_angle -= servo_speed * 0.15;
-    }
+    //if (current_angle <= 170) {
+    bottom_servo.write(servo_forward);
+    delay(150);
+    bottom_servo.write(servo_stop);
+    current_angle += servo_speed * 0.15;
+    //}
+  } else if (((ldr1 - ldr3) < -30) || ((ldr2 - ldr4) < -30)) {
+    //if (current_angle >= -170) {
+    bottom_servo.write(servo_backward);
+    delay(150);
+    bottom_servo.write(servo_stop);
+    current_angle -= servo_speed * 0.15;
+    //}
   }
-
+  
   // Weather Station
   temperature = dht.readTemperature(true);
   humidity = dht.readHumidity();
@@ -284,6 +276,95 @@ void lcd_display() {
     
     lcd_change = true;
   }
+}
+
+void video_demo() {
+
+  delay(3000);
+  
+  motor_pos += 5;
+  top_servo.write(motor_pos);
+  delay(750);
+  motor_pos += 5;
+  top_servo.write(motor_pos);
+  delay(750);
+  motor_pos += 5;
+  top_servo.write(motor_pos);
+  delay(750);
+  motor_pos += 5;
+  top_servo.write(motor_pos);
+  delay(750);
+  motor_pos -= 5;
+  top_servo.write(motor_pos);
+  delay(750);
+  motor_pos -= 5;
+  top_servo.write(motor_pos);
+  delay(750);
+  motor_pos -= 5;
+  top_servo.write(motor_pos);
+  delay(750);
+  motor_pos -= 5;
+  top_servo.write(motor_pos);
+  delay(750);
+  motor_pos -= 5;
+  top_servo.write(motor_pos);
+  delay(750);
+  motor_pos -= 5;
+  top_servo.write(motor_pos);
+  delay(750);
+  motor_pos -= 5;
+  top_servo.write(motor_pos);
+  delay(750);
+  motor_pos -= 5;
+  top_servo.write(motor_pos);
+  delay(750);
+
+  bottom_servo.write(servo_forward);
+  delay(150);
+  bottom_servo.write(servo_stop);
+  delay(850);
+  bottom_servo.write(servo_forward);
+  delay(150);
+  bottom_servo.write(servo_stop);
+  delay(850);
+  bottom_servo.write(servo_forward);
+  delay(150);
+  bottom_servo.write(servo_stop);
+  delay(850);
+  bottom_servo.write(servo_forward);
+  delay(150);
+  bottom_servo.write(servo_stop);
+  delay(850);
+  bottom_servo.write(servo_backward);
+  delay(150);
+  bottom_servo.write(servo_stop);
+  delay(850);
+  bottom_servo.write(servo_backward);
+  delay(150);
+  bottom_servo.write(servo_stop);
+  delay(850);
+  bottom_servo.write(servo_backward);
+  delay(150);
+  bottom_servo.write(servo_stop);
+  delay(850);
+  bottom_servo.write(servo_backward);
+  delay(150);
+  bottom_servo.write(servo_stop);
+  delay(850);
+  bottom_servo.write(servo_backward);
+  delay(150);
+  bottom_servo.write(servo_stop);
+  delay(850);
+  bottom_servo.write(servo_backward);
+  delay(150);
+  bottom_servo.write(servo_stop);
+  delay(850);
+  bottom_servo.write(servo_backward);
+  delay(150);
+  bottom_servo.write(servo_stop);
+  delay(850);
+  
+  
 }
 
 void set_initial() {
